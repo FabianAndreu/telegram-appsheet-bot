@@ -4,7 +4,7 @@ import time
 from telegram.ext import Updater, MessageHandler, Filters
 
 # 🔐 TOKEN
-TOKEN = os.getenv("8372925592:AAEMdRQ4EKgcXol3ac1kItUJFQSiiCveF2s")
+TOKEN = os.getenv("TOKEN")
 
 # 📊 CSV DE VENTAS (VENTAS EN LA PRIMERA HOJA)
 URL = "https://docs.google.com/spreadsheets/d/1dBOYaPLZEreVe6gmGonHIGu4_sMD0nye/export?format=csv"
@@ -78,4 +78,5 @@ updater.job_queue.run_repeating(monitor_ventas, interval=5, first=5)
 print("🤖 Bot activo y leyendo ventas...")
 updater.start_polling()
 updater.idle()
+
 
