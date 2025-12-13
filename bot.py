@@ -1,42 +1,78 @@
 import os
 import pandas as pd
-from fastapi import FastAPI, Request
-from telegram import Bot
-import uvicorn
+from telegram.ext import Updater, MessageHandler, Filters
 
+# 🔐 TOKEN desde variable de entorno
 TOKEN = os.getenv("TOKEN")
 if not TOKEN:
     raise ValueError("TOKEN no encontrado en variables de entorno")
 
-bot = Bot(token=TOKEN)
-app = FastAPI()
+# 📊 CSV DE VENTAS
+URL = "https://docs.google.com/spreadsheets/d/1dBOYaPLZEreVe6gmGonHIGu4_sMD0nye/export?format=csv"
 
-# Mapeo de ID empleado a chat_id (modifica según tus chats)
-empleado_chat = {
-    "1001": 123456789,  # ID empleado : chat_id de Telegram
-    "1002": 987654321,
-    # agrega todos tus empleados
-}
+# 📦 USUARIOS REGISTRADOS
+usuarios = {}  
+# chat_id : { "empleado": "1", "ventas_vistas": 0 }
 
-@app.post("/webhook")
-async def webhook(request: Request):
-    data = await request.json()
-    empleado = str(data.get("empleado"))
-    total = float(data.get("total", 0))
-    fecha = data.get("fecha", "Desconocida")
+def leer_ventas():
+    df = pd.read_csv(URL)
+    df["Empleado"] = df["Empleado"].astype(str).str.strip()
+    df["Total"] = pd.to_numeric(df["Total"], errors="coerce").fillna(0)
+    df["Fecha"] = pd.to_datetime(df["Fecha"], errors="coerce").astype(str)
+    return df
 
-    chat_id = empleado_chat.get(empleado)
-    if chat_id:
-        await bot.send_message(
-            chat_id=chat_id,
-            text=(
-                f"🆕 Nueva venta registrada!\n\n"
-                f"🧾 Total de la venta: ${int(total):,} COP\n"
-                f"📅 Fecha: {fecha}"
-            )
-        )
-    return {"status": "ok"}
-    
+def registrar_empleado(update, context):
+    texto = update.message.text.strip()
+    chat_id = update.message.chat_id
 
-if __name__ == "__main__":
-    uvicorn.run(app, host="0.0.0.0", port=int(os.environ.get("PORT", 8000)))
+    if not texto.isdigit():
+        update.message.reply_text("❌ Envía solo tu ID de empleado (ej: 1)")
+        return
+
+    df = leer_ventas()
+    ventas = df[df["Empleado"] == texto]
+
+    usuarios[chat_id] = {
+        "empleado": texto,
+        "ventas_vistas": len(ventas)
+    }
+
+    update.message.reply_text(
+        f"✅ Empleado {texto} registrado\n"
+        f"👀 A partir de ahora recibirás notificaciones automáticas"
+    )
+
+def monitor_ventas(context):
+    df = leer_ventas()
+
+    for chat_id, info in usuarios.items():
+        emp = info["empleado"]
+        ventas_emp = df[df["Empleado"] == emp]
+
+        # Detecta nuevas ventas
+        if len(ventas_emp) > info["ventas_vistas"]:
+            nuevas = ventas_emp.iloc[info["ventas_vistas"]:]
+            for _, v in nuevas.iterrows():
+                context.bot.send_message(
+                    chat_id=chat_id,
+                    text=(
+                        "🆕 NUEVA VENTA REGISTRADA\n\n"
+                        f"👤 Empleado: {emp}\n"
+                        f"📅 Fecha: {v['Fecha']}\n"
+                        f"💰 Total: ${int(v['Total']):,} COP"
+                    )
+                )
+            usuarios[chat_id]["ventas_vistas"] = len(ventas_emp)
+
+# 🚀 BOT
+updater = Updater(TOKEN, use_context=True)
+dp = updater.dispatcher
+
+dp.add_handler(MessageHandler(Filters.text & ~Filters.command, registrar_empleado))
+
+# ⏱️ Revisar ventas cada 5 segundos
+updater.job_queue.run_repeating(monitor_ventas, interval=5, first=5)
+
+print("🤖 Bot activo y leyendo ventas...")
+updater.start_polling()
+updater.idle()
