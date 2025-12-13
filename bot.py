@@ -4,6 +4,10 @@ from telegram import Update
 from telegram.ext import ApplicationBuilder, MessageHandler, ContextTypes, filters
 
 TOKEN = os.getenv("TOKEN")
+if not TOKEN:
+    raise ValueError("TOKEN no encontrado en variables de entorno")
+
+app = ApplicationBuilder().token(TOKEN).build()
 
 URL = "https://docs.google.com/spreadsheets/d/1dBOYaPLZEreVe6gmGonHIGu4_sMD0nye/export?format=csv"
 
@@ -34,3 +38,4 @@ app.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, responder))
 
 print("🤖 Bot activo 24/7 en Railway")
 app.run_polling()
+
