@@ -1,8 +1,9 @@
 import os
 import pandas as pd
-from telegram.ext import Updater, MessageHandler, Filters
+from telegram import Update
+from telegram.ext import ApplicationBuilder, MessageHandler, ContextTypes, filters
 
-# 🔐 TOKEN desde variable de entorno
+# 🔐 TOKEN
 TOKEN = os.getenv("TOKEN")
 if not TOKEN:
     raise ValueError("TOKEN no encontrado en variables de entorno")
@@ -11,8 +12,7 @@ if not TOKEN:
 URL = "https://docs.google.com/spreadsheets/d/1dBOYaPLZEreVe6gmGonHIGu4_sMD0nye/export?format=csv"
 
 # 📦 USUARIOS REGISTRADOS
-usuarios = {}  
-# chat_id : { "empleado": "1", "ventas_vistas": 0 }
+usuarios = {}  # chat_id : { "empleado": "1", "ventas_vistas": 0 }
 
 def leer_ventas():
     df = pd.read_csv(URL)
@@ -21,12 +21,12 @@ def leer_ventas():
     df["Fecha"] = pd.to_datetime(df["Fecha"], errors="coerce").astype(str)
     return df
 
-def registrar_empleado(update, context):
+async def registrar_empleado(update: Update, context: ContextTypes.DEFAULT_TYPE):
     texto = update.message.text.strip()
     chat_id = update.message.chat_id
 
     if not texto.isdigit():
-        update.message.reply_text("❌ Envía solo tu ID de empleado (ej: 1)")
+        await update.message.reply_text("❌ Envía solo tu ID de empleado (ej: 1)")
         return
 
     df = leer_ventas()
@@ -37,23 +37,22 @@ def registrar_empleado(update, context):
         "ventas_vistas": len(ventas)
     }
 
-    update.message.reply_text(
+    await update.message.reply_text(
         f"✅ Empleado {texto} registrado\n"
         f"👀 A partir de ahora recibirás notificaciones automáticas"
     )
 
-def monitor_ventas(context):
+async def monitor_ventas(application):
     df = leer_ventas()
 
     for chat_id, info in usuarios.items():
         emp = info["empleado"]
         ventas_emp = df[df["Empleado"] == emp]
 
-        # Detecta nuevas ventas
         if len(ventas_emp) > info["ventas_vistas"]:
             nuevas = ventas_emp.iloc[info["ventas_vistas"]:]
             for _, v in nuevas.iterrows():
-                context.bot.send_message(
+                await application.bot.send_message(
                     chat_id=chat_id,
                     text=(
                         "🆕 NUEVA VENTA REGISTRADA\n\n"
@@ -64,15 +63,22 @@ def monitor_ventas(context):
                 )
             usuarios[chat_id]["ventas_vistas"] = len(ventas_emp)
 
-# 🚀 BOT
-updater = Updater(TOKEN, use_context=True)
-dp = updater.dispatcher
+async def job_periodico(application):
+    import asyncio
+    while True:
+        await monitor_ventas(application)
+        await asyncio.sleep(5)  # revisa cada 5 segundos
 
-dp.add_handler(MessageHandler(Filters.text & ~Filters.command, registrar_empleado))
+if __name__ == "__main__":
+    app = ApplicationBuilder().token(TOKEN).build()
 
-# ⏱️ Revisar ventas cada 5 segundos
-updater.job_queue.run_repeating(monitor_ventas, interval=5, first=5)
+    # Handler para registrar empleados
+    app.add_handler(MessageHandler(filters.TEXT & (~filters.COMMAND), registrar_empleado))
 
-print("🤖 Bot activo y leyendo ventas...")
-updater.start_polling()
-updater.idle()
+    # Ejecutar job periódico en paralelo
+    import asyncio
+    loop = asyncio.get_event_loop()
+    loop.create_task(job_periodico(app))
+
+    print("🤖 Bot activo y monitoreando ventas...")
+    app.run_polling()
