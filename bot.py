@@ -16,9 +16,17 @@ usuarios = {}  # chat_id : { "empleado": "1", "ventas_vistas": 0 }
 
 def leer_ventas():
     df = pd.read_csv(URL)
+
     df["Empleado"] = df["Empleado"].astype(str).str.strip()
     df["Total"] = pd.to_numeric(df["Total"], errors="coerce").fillna(0)
-    df["Fecha"] = pd.to_datetime(df["Fecha"], errors="coerce").astype(str)
+
+    # ✅ Especificamos formato de fecha (DD/MM/YYYY)
+    df["Fecha"] = pd.to_datetime(
+        df["Fecha"],
+        format="%d/%m/%Y",
+        errors="coerce"
+    )
+
     return df
 
 async def registrar_empleado(update: Update, context: ContextTypes.DEFAULT_TYPE):
@@ -57,7 +65,7 @@ async def monitor_ventas(application):
                     text=(
                         "🆕 NUEVA VENTA REGISTRADA\n\n"
                         f"👤 Empleado: {emp}\n"
-                        f"📅 Fecha: {v['Fecha']}\n"
+                        f"📅 Fecha: {v['Fecha'].strftime('%d/%m/%Y') if pd.notna(v['Fecha']) else 'Sin fecha'}\n"
                         f"💰 Total: ${int(v['Total']):,} COP"
                     )
                 )
@@ -82,3 +90,4 @@ if __name__ == "__main__":
 
     print("🤖 Bot activo y monitoreando ventas...")
     app.run_polling()
+
