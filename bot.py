@@ -38,7 +38,7 @@ async def registrar_empleado(update: Update, context: ContextTypes.DEFAULT_TYPE)
         return
 
     df = leer_ventas()
-    ventas = df[df["Empleado"] == texto]
+    ventas = df[df["Empleado"].astype(str).str.strip() == texto]
 
     usuarios[chat_id] = {
         "empleado": texto,
@@ -55,7 +55,7 @@ async def monitor_ventas(application):
 
     for chat_id, info in usuarios.items():
         emp = info["empleado"]
-        ventas_emp = df[df["Empleado"] == emp]
+        ventas_emp = df[df["Empleado"].astype(str).str.strip() == emp]
 
         if len(ventas_emp) > info["ventas_vistas"]:
             nuevas = ventas_emp.iloc[info["ventas_vistas"]:]
@@ -90,4 +90,5 @@ if __name__ == "__main__":
 
     print("🤖 Bot activo y monitoreando ventas...")
     app.run_polling()
+
 
